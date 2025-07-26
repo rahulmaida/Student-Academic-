@@ -1,0 +1,128 @@
+-- Create Students Table
+CREATE TABLE Students (
+    student_id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100),
+    date_of_birth DATE,
+    department VARCHAR(50)
+);
+
+-- Create Courses Table
+CREATE TABLE Courses (
+    course_id INT AUTO_INCREMENT PRIMARY KEY,
+    course_name VARCHAR(100),
+    credits INT
+);
+
+-- Create Semesters Table
+CREATE TABLE Semesters (
+    semester_id INT AUTO_INCREMENT PRIMARY KEY,
+    semester_name VARCHAR(50),
+    start_date DATE,
+    end_date DATE
+);
+
+-- Create Grades Table with Foreign Keys
+CREATE TABLE Grades (
+    grade_id INT AUTO_INCREMENT PRIMARY KEY,
+    student_id INT,
+    course_id INT,
+    semester_id INT,
+    marks INT,
+    grade CHAR(2),
+    gpa DECIMAL(3,2),
+    FOREIGN KEY (student_id) REFERENCES Students(student_id),
+    FOREIGN KEY (course_id) REFERENCES Courses(course_id),
+    FOREIGN KEY (semester_id) REFERENCES Semesters(semester_id)
+);
+
+-- Insert Students
+INSERT INTO Students (name, date_of_birth, department)
+VALUES 
+('Amit Sharma', '2002-01-15', 'CSE'),
+('Priya Yadav', '2001-11-30', 'ECE');
+
+-- Insert Courses
+INSERT INTO Courses (course_name, credits)
+VALUES 
+('DBMS', 4), 
+('Maths', 3), 
+('OS', 4);
+
+-- Insert Semesters
+INSERT INTO Semesters (semester_name, start_date, end_date)
+VALUES 
+('Semester 1', '2024-01-01', '2024-06-30');
+
+-- Insert Grades
+INSERT INTO Grades (student_id, course_id, semester_id, marks, grade, gpa)
+VALUES 
+(1, 1, 1, 85, 'A', 9.0),
+(1, 2, 1, 72, 'B', 8.0),
+(1, 3, 1, 66, 'C', 7.0),
+(2, 1, 1, 45, 'F', 0.0),
+(2, 2, 1, 58, 'D', 6.0),
+(2, 3, 1, 77, 'B', 8.0);
+
+-- Pass/Fail Summary per Student
+SELECT 
+  s.name,
+  SUM(CASE WHEN g.grade = 'F' THEN 1 ELSE 0 END) AS failed_courses,
+  COUNT(*) AS total_courses,
+  CASE 
+    WHEN SUM(CASE WHEN g.grade = 'F' THEN 1 ELSE 0 END) > 0 THEN 'FAIL'
+    ELSE 'PASS'
+  END AS result
+FROM Students s
+JOIN Grades g ON s.student_id = g.student_id
+GROUP BY s.student_id;
+
+-- GPA and Rank per Student per Semester
+SELECT 
+  s.name,
+  sem.semester_name,
+  ROUND(SUM(g.gpa * c.credits) / SUM(c.credits), 2) AS gpa,
+  RANK() OVER (
+    PARTITION BY sem.semester_id 
+    ORDER BY SUM(g.gpa * c.credits) / SUM(c.credits) DESC
+  ) AS rank
+FROM Grades g
+JOIN Students s ON g.student_id = s.student_id
+JOIN Courses c ON g.course_id = c.course_id
+JOIN Semesters sem ON g.semester_id = sem.semester_id
+GROUP BY s.student_id, sem.semester_id;
+
+-- Trigger: Auto-calculate Grade and GPA
+DELIMITER //
+
+CREATE TRIGGER calc_grade_gpa
+BEFORE INSERT ON Grades
+FOR EACH ROW
+BEGIN
+  IF NEW.marks >= 85 THEN
+    SET NEW.grade = 'A', NEW.gpa = 9.0;
+  ELSEIF NEW.marks >= 70 THEN
+    SET NEW.grade = 'B', NEW.gpa = 8.0;
+  ELSEIF NEW.marks >= 60 THEN
+    SET NEW.grade = 'C', NEW.gpa = 7.0;
+  ELSEIF NEW.marks >= 50 THEN
+    SET NEW.grade = 'D', NEW.gpa = 6.0;
+  ELSE
+    SET NEW.grade = 'F', NEW.gpa = 0.0;
+  END IF;
+END //
+
+DELIMITER ;
+
+-- Detailed Grade Report
+SELECT 
+  sem.semester_name,
+  s.name,
+  c.course_name,
+  g.marks,
+  g.grade,
+  g.gpa
+FROM Grades g
+JOIN Students s ON g.student_id = s.student_id
+JOIN Courses c ON g.course_id = c.course_id
+JOIN Semesters sem ON g.semester_id = sem.semester_id
+ORDER BY sem.semester_id, s.name;
